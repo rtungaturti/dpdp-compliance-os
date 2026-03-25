@@ -118,14 +118,14 @@ nav{padding:12px 8px;flex:1;overflow-y:auto}
     <button class="nav-item" onclick="showPage('coverage')"><span class="nav-dot"></span>DPDP Coverage</button>
     <button class="nav-item" onclick="showPage('hitl')"><span class="nav-dot"></span>HITL Queue</button>
     <div class="nav-section">Quick Links</div>
-    <button class="nav-item" onclick="window.open('http://localhost:8003/docs','_blank')"><span class="nav-dot"></span>Consent Engine</button>
-    <button class="nav-item" onclick="window.open('http://localhost:8101/docs','_blank')"><span class="nav-dot"></span>SDF Determinator</button>
-    <button class="nav-item" onclick="window.open('http://localhost:8102/docs','_blank')"><span class="nav-dot"></span>DPIA Engine</button>
-    <button class="nav-item" onclick="window.open('http://localhost:8103/docs','_blank')"><span class="nav-dot"></span>AI Bias Monitor</button>
-    <button class="nav-item" onclick="window.open('http://localhost:8606/docs','_blank')"><span class="nav-dot"></span>PBAC Engine</button>
-    <button class="nav-item" onclick="window.open('http://localhost:8701/docs','_blank')"><span class="nav-dot"></span>Shadow AI Discovery</button>
-    <button class="nav-item" onclick="window.open('http://localhost:16686','_blank')"><span class="nav-dot"></span>Jaeger Tracing</button>
-    <button class="nav-item" onclick="window.open('http://localhost:8080','_blank')"><span class="nav-dot"></span>Traefik Dashboard</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/consent/docs','_blank')"><span class="nav-dot"></span>Consent Engine</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/sdf/docs','_blank')"><span class="nav-dot"></span>SDF Determinator</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/dpia/docs','_blank')"><span class="nav-dot"></span>DPIA Engine</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/bias/docs','_blank')"><span class="nav-dot"></span>AI Bias Monitor</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/pbac/docs','_blank')"><span class="nav-dot"></span>PBAC Engine</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/shadow-ai/docs','_blank')"><span class="nav-dot"></span>Shadow AI Discovery</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/docs','_blank')"><span class="nav-dot"></span>Jaeger Tracing</button>
+    <button class="nav-item" onclick="window.open('https://dpdp-compliance-os-production.up.railway.app/docs','_blank')"><span class="nav-dot"></span>Traefik Dashboard</button>
   </nav>
   <div class="sidebar-footer"><span class="status-dot"></span><span id="container-count">60 containers running</span></div>
 </aside>
@@ -217,9 +217,10 @@ nav{padding:12px 8px;flex:1;overflow-y:auto}
 </div>
 </div>
 <script>
-const API={score:'http://localhost:8506',hitl:'http://localhost:8303',consent:'http://localhost:8003'};
+const RAILWAY='https://dpdp-compliance-os-production.up.railway.app';
+const API={score:RAILWAY+'/score',hitl:RAILWAY+'/hitl-service',consent:RAILWAY+'/consent'};
 const SERVICES=[
-  {name:'role-classifier',port:8001,day:1},{name:'consent-engine',port:8003,day:1},{name:'rights-portal',port:8004,day:1},
+  {name:'role-classifier',port:8001,day:1,prefix:'role-classifier'},{name:'consent-engine',port:8003,day:1},{name:'rights-portal',port:8004,day:1},
   {name:'lifecycle-mapper',port:8002,day:1},{name:'breach-simulator',port:8005,day:1},{name:'evidence-generator',port:8006,day:1},
   {name:'sdf-determinator',port:8101,day:2},{name:'dpia-engine',port:8102,day:2},{name:'ai-bias-monitor',port:8103,day:2},
   {name:'cross-border-pep',port:8104,day:2},{name:'penalty-dashboard',port:8105,day:2},{name:'ai-governance',port:8106,day:2},
@@ -295,7 +296,7 @@ async function loadHITL(){
 }
 
 async function loadServices(){
-  const checks=SERVICES.map(async svc=>{try{await fetchJ(`http://localhost:${svc.port}/health`);return{...svc,status:'up'};}catch(e){return{...svc,status:'down'};}});
+  const checks=SERVICES.map(async svc=>{try{await fetchJ(`https://dpdp-compliance-os-production.up.railway.app/${svc.prefix||svc.name}/health`);return{...svc,status:'up'};}catch(e){return{...svc,status:'down'};}});
   const results=await Promise.allSettled(checks);
   const svcs=results.map(r=>r.status==='fulfilled'?r.value:{status:'down'});
   const up=svcs.filter(s=>s.status==='up').length;
