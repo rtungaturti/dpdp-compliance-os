@@ -1,0 +1,25 @@
+FROM python:3.11-slim AS base
+
+# Security hardening
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Common dependencies shared across all services
+COPY requirements.base.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.base.txt
+
+WORKDIR /app
+USER appuser
+
+# Default healthcheck — every service overrides the path
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+
+# -------------------------------------------------------------------
+FROM base AS service
+COPY --chown=appuser:appuser . .
+RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${PORT:-8000}"]

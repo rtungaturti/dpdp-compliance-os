@@ -1,0 +1,987 @@
+# =============================================================================
+# DPDP + AI Compliance OS — Days 2-8  (YAML-valid, Windows-compatible)
+# Usage:
+#   docker compose -f docker-compose.day1.yml -f docker-compose.day2-8.yml `
+#     --profile day2 up -d
+# =============================================================================
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - compliance-net
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-env-defaults: &env-defaults
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  DB_HOST: postgres
+  REDIS_HOST: redis
+  KAFKA_BOOTSTRAP: kafka:9092
+  NEO4J_URI: bolt://neo4j:7687
+  TEMPORAL_HOST: temporal:7233
+  S3_ENDPOINT: minio:9000
+
+x-hc-fast: &hc-fast
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  start_period: 30s
+
+services:
+
+  # ===========================================================================
+  # DAY 2
+  # ===========================================================================
+
+  sdf-determinator:
+    <<: *service-defaults
+    profiles: [day2, all]
+    build:
+      context: ./services/day2/sdf-determinator
+      dockerfile: Dockerfile
+    image: compliance-day2/sdf-determinator:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      redis:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: sdf-determinator
+    ports:
+      - "8101:8101"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8101/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dpia-engine:
+    <<: *service-defaults
+    profiles: [day2, all]
+    build:
+      context: ./services/day2/dpia-engine
+      dockerfile: Dockerfile
+    image: compliance-day2/dpia-engine:1.0
+    depends_on:
+      postgres:  { condition: service_started }
+      temporal:  { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: dpia-engine
+    ports:
+      - "8102:8102"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8102/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ai-bias-monitor:
+    <<: *service-defaults
+    profiles: [day2, all]
+    build:
+      context: ./services/day2/ai-bias-monitor
+      dockerfile: Dockerfile
+    image: compliance-day2/ai-bias-monitor:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: ai-bias-monitor
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8103:8103"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8103/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  cross-border-pep:
+    <<: *service-defaults
+    profiles: [day2, all]
+    build:
+      context: ./services/day2/cross-border-pep
+      dockerfile: Dockerfile
+    image: compliance-day2/cross-border-pep:1.0
+    depends_on:
+      redis: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: cross-border-pep
+    ports:
+      - "8104:8104"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8104/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  penalty-dashboard:
+    <<: *service-defaults
+    profiles: [day2, all]
+    build:
+      context: ./services/day2/penalty-dashboard
+      dockerfile: Dockerfile
+    image: compliance-day2/penalty-dashboard:1.0
+    depends_on:
+      timescaledb: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: penalty-dashboard
+      METRICS_DB_HOST: timescaledb
+    ports:
+      - "8105:8105"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8105/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ai-governance:
+    <<: *service-defaults
+    profiles: [day2, all]
+    build:
+      context: ./services/day2/ai-governance
+      dockerfile: Dockerfile
+    image: compliance-day2/ai-governance:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      neo4j:    { condition: service_started }
+      kafka:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: ai-governance
+    ports:
+      - "8106:8106"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8106/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # DAY 3
+  # ===========================================================================
+
+  preference-manager:
+    <<: *service-defaults
+    profiles: [day3, all]
+    build:
+      context: ./services/day3/preference-manager
+      dockerfile: Dockerfile
+    image: compliance-day3/preference-manager:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      redis:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: preference-manager
+    ports:
+      - "8202:8202"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8202/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  withdrawal-propagator:
+    <<: *service-defaults
+    profiles: [day3, all]
+    build:
+      context: ./services/day3/withdrawal-propagator
+      dockerfile: Dockerfile
+    image: compliance-day3/withdrawal-propagator:1.0
+    depends_on:
+      kafka: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: withdrawal-propagator
+      CONSENT_API_URL: http://consent-engine:8003
+    ports:
+      - "8203:8203"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8203/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  consent-receipt:
+    <<: *service-defaults
+    profiles: [day3, all]
+    build:
+      context: ./services/day3/consent-receipt
+      dockerfile: Dockerfile
+    image: compliance-day3/consent-receipt:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      minio:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: consent-receipt
+    ports:
+      - "8204:8204"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8204/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  deemed-use-analyzer:
+    <<: *service-defaults
+    profiles: [day3, all]
+    build:
+      context: ./services/day3/deemed-use-analyzer
+      dockerfile: Dockerfile
+    image: compliance-day3/deemed-use:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: deemed-use-analyzer
+    ports:
+      - "8205:8205"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8205/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # DAY 4
+  # ===========================================================================
+
+  hitl-service:
+    <<: *service-defaults
+    profiles: [day4, all]
+    build:
+      context: ./services/day4/hitl-service
+      dockerfile: Dockerfile
+    image: compliance-day4/hitl-service:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      temporal: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: hitl-service
+    ports:
+      - "8303:8303"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8303/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  identity-verification:
+    <<: *service-defaults
+    profiles: [day4, all]
+    build:
+      context: ./services/day4/identity-verification
+      dockerfile: Dockerfile
+    image: compliance-day4/identity-verification:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      redis:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: identity-verification
+    ports:
+      - "8302:8302"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8302/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  sla-tracker:
+    <<: *service-defaults
+    profiles: [day4, all]
+    build:
+      context: ./services/day4/sla-tracker
+      dockerfile: Dockerfile
+    image: compliance-day4/sla-tracker:1.0
+    depends_on:
+      timescaledb: { condition: service_started }
+      temporal:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: sla-tracker
+      METRICS_DB_HOST: timescaledb
+    ports:
+      - "8304:8304"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8304/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  escalation-engine:
+    <<: *service-defaults
+    profiles: [day4, all]
+    build:
+      context: ./services/day4/escalation-engine
+      dockerfile: Dockerfile
+    image: compliance-day4/escalation-engine:1.0
+    depends_on:
+      temporal: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: escalation-engine
+      HITL_API_URL: http://hitl-service:8303
+    ports:
+      - "8306:8306"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8306/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # DAY 5
+  # ===========================================================================
+
+  data-lineage-graph:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/data-lineage-graph
+      dockerfile: Dockerfile
+    image: compliance-day5/lineage-graph:1.0
+    depends_on:
+      neo4j: { condition: service_started }
+      kafka:  { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: data-lineage-graph
+    ports:
+      - "8407:8407"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8407/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  breach-intake:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/breach-intake
+      dockerfile: Dockerfile
+    image: compliance-day5/breach-intake:1.0
+    depends_on:
+      kafka: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: breach-intake
+    ports:
+      - "8401:8401"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8401/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  harm-assessor:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/harm-assessor
+      dockerfile: Dockerfile
+    image: compliance-day5/harm-assessor:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: harm-assessor
+      LINEAGE_API_URL: http://data-lineage-graph:8407
+    ports:
+      - "8402:8402"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8402/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  notification-generator:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/notification-generator
+      dockerfile: Dockerfile
+    image: compliance-day5/notification-generator:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: notification-generator
+    ports:
+      - "8403:8403"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8403/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  incident-binder:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/incident-binder
+      dockerfile: Dockerfile
+    image: compliance-day5/incident-binder:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      minio:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: incident-binder
+    ports:
+      - "8404:8404"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8404/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  remediation-tracker:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/remediation-tracker
+      dockerfile: Dockerfile
+    image: compliance-day5/remediation-tracker:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      temporal: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: remediation-tracker
+    ports:
+      - "8405:8405"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8405/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  post-incident-analysis:
+    <<: *service-defaults
+    profiles: [day5, all]
+    build:
+      context: ./services/day5/post-incident-analysis
+      dockerfile: Dockerfile
+    image: compliance-day5/post-incident:1.0
+    depends_on:
+      timescaledb: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: post-incident-analysis
+      METRICS_DB_HOST: timescaledb
+    ports:
+      - "8406:8406"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8406/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # DAY 6
+  # ===========================================================================
+
+  compliance-score:
+    <<: *service-defaults
+    profiles: [day6, all]
+    build:
+      context: ./services/day6/compliance-score
+      dockerfile: Dockerfile
+    image: compliance-day6/compliance-score:1.0
+    depends_on:
+      timescaledb: { condition: service_started }
+      postgres:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: compliance-score
+      METRICS_DB_HOST: timescaledb
+    ports:
+      - "8506:8506"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8506/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  penalty-calculator:
+    <<: *service-defaults
+    profiles: [day6, all]
+    build:
+      context: ./services/day6/penalty-calculator
+      dockerfile: Dockerfile
+    image: compliance-day6/penalty-calculator:1.0
+    depends_on:
+      postgres:    { condition: service_started }
+      timescaledb: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: penalty-calculator
+      METRICS_DB_HOST: timescaledb
+    ports:
+      - "8501:8501"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  aggravating-analyzer:
+    <<: *service-defaults
+    profiles: [day6, all]
+    build:
+      context: ./services/day6/aggravating-analyzer
+      dockerfile: Dockerfile
+    image: compliance-day6/aggravating-analyzer:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: aggravating-analyzer
+    ports:
+      - "8502:8502"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8502/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  appeal-workflow:
+    <<: *service-defaults
+    profiles: [day6, all]
+    build:
+      context: ./services/day6/appeal-workflow
+      dockerfile: Dockerfile
+    image: compliance-day6/appeal-workflow:1.0
+    depends_on:
+      temporal: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: appeal-workflow
+      HITL_API_URL: http://hitl-service:8303
+    ports:
+      - "8503:8503"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8503/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  regulatory-response:
+    <<: *service-defaults
+    profiles: [day6, all]
+    build:
+      context: ./services/day6/regulatory-response
+      dockerfile: Dockerfile
+    image: compliance-day6/regulatory-response:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      minio:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: regulatory-response
+    ports:
+      - "8504:8504"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8504/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  settlement-optimizer:
+    <<: *service-defaults
+    profiles: [day6, all]
+    build:
+      context: ./services/day6/settlement-optimizer
+      dockerfile: Dockerfile
+    image: compliance-day6/settlement-optimizer:1.0
+    depends_on:
+      mlflow: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: settlement-optimizer
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8505:8505"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8505/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # DAY 7
+  # ===========================================================================
+
+  pbac-engine:
+    <<: *service-defaults
+    profiles: [day7, all]
+    build:
+      context: ./services/day7/pbac-engine
+      dockerfile: Dockerfile
+    image: compliance-day7/pbac-engine:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      redis:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: pbac-engine
+      CONSENT_API_URL: http://consent-engine:8003
+    ports:
+      - "8606:8606"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8606/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dpo-console:
+    <<: *service-defaults
+    profiles: [day7, all]
+    build:
+      context: ./services/day7/dpo-console
+      dockerfile: Dockerfile
+    image: compliance-day7/dpo-console:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      temporal: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: dpo-console
+    ports:
+      - "8601:8601"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8601/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  audit-management:
+    <<: *service-defaults
+    profiles: [day7, all]
+    build:
+      context: ./services/day7/audit-management
+      dockerfile: Dockerfile
+    image: compliance-day7/audit-management:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      minio:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: audit-management
+    ports:
+      - "8602:8602"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8602/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  data-protection-by-design:
+    <<: *service-defaults
+    profiles: [day7, all]
+    build:
+      context: ./services/day7/data-protection-by-design
+      dockerfile: Dockerfile
+    image: compliance-day7/dpbd:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: data-protection-by-design
+    ports:
+      - "8603:8603"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8603/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  vendor-risk-assessor:
+    <<: *service-defaults
+    profiles: [day7, all]
+    build:
+      context: ./services/day7/vendor-risk-assessor
+      dockerfile: Dockerfile
+    image: compliance-day7/vendor-risk:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      neo4j:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: vendor-risk-assessor
+    ports:
+      - "8604:8604"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8604/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  cross-border-controller:
+    <<: *service-defaults
+    profiles: [day7, all]
+    build:
+      context: ./services/day7/cross-border-controller
+      dockerfile: Dockerfile
+    image: compliance-day7/cross-border-controller:1.0
+    depends_on:
+      redis: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: cross-border-controller
+      PEP_API_URL: http://cross-border-pep:8104
+    ports:
+      - "8605:8605"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8605/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # DAY 8
+  # ===========================================================================
+
+  shadow-ai-discovery:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/shadow-ai-discovery
+      dockerfile: Dockerfile
+    image: compliance-day8/shadow-ai:1.0
+    depends_on:
+      kafka: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: shadow-ai-discovery
+    ports:
+      - "8701:8701"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8701/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  rag-corpus-privacy:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/rag-corpus-privacy
+      dockerfile: Dockerfile
+    image: compliance-day8/rag-privacy:1.0
+    depends_on:
+      postgres: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: rag-corpus-privacy
+    ports:
+      - "8702:8702"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8702/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  prompt-minimization:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/prompt-minimization
+      dockerfile: Dockerfile
+    image: compliance-day8/prompt-min:1.0
+    depends_on:
+      redis: { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: prompt-minimization
+    ports:
+      - "8703:8703"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8703/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  synthetic-data-governance:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/synthetic-data-governance
+      dockerfile: Dockerfile
+    image: compliance-day8/synthetic:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      mlflow:   { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: synthetic-data-governance
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8704:8704"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8704/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  unified-evidence-exporter:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/unified-evidence-exporter
+      dockerfile: Dockerfile
+    image: compliance-day8/evidence-exporter:1.0
+    depends_on:
+      postgres: { condition: service_started }
+      minio:    { condition: service_started }
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: unified-evidence-exporter
+    ports:
+      - "8705:8705"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8705/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  legal-sandbox:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/legal-sandbox
+      dockerfile: Dockerfile
+    image: compliance-day8/legal-sandbox:1.0
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: legal-sandbox
+      SDF_API_URL: http://sdf-determinator:8101
+      DPIA_API_URL: http://dpia-engine:8102
+    ports:
+      - "8707:8707"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8707/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  unified-portal:
+    <<: *service-defaults
+    profiles: [day8, all]
+    build:
+      context: ./services/day8/unified-portal
+      dockerfile: Dockerfile
+    image: compliance-day8/unified-portal:1.0
+    ports:
+      - "8706:8706"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8706/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # FRONTENDS
+  # ===========================================================================
+
+  executive-dashboard:
+    <<: *service-defaults
+    profiles: [frontend, all]
+    build:
+      context: ./frontend/executive-dashboard
+      dockerfile: Dockerfile
+    image: compliance-frontend/executive:1.0
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dpo-console-frontend:
+    <<: *service-defaults
+    profiles: [frontend, all]
+    build:
+      context: ./frontend/dpo-console
+      dockerfile: Dockerfile
+    image: compliance-frontend/dpo:1.0
+    ports:
+      - "3002:3002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  auditor-portal:
+    <<: *service-defaults
+    profiles: [frontend, all]
+    build:
+      context: ./frontend/auditor-portal
+      dockerfile: Dockerfile
+    image: compliance-frontend/auditor:1.0
+    ports:
+      - "3003:3003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  compliance-net:
+    driver: bridge

@@ -1,0 +1,45 @@
+# ============================================================
+# .gitattributes — Line ending control for Docker on Windows
+#
+# Python files in Linux containers MUST have LF endings.
+# Git on Windows defaults to CRLF which breaks:
+#   - Python scripts (syntax errors on shebang lines)
+#   - Shell scripts in Dockerfiles
+#   - YAML files (subtle parse failures)
+# ============================================================
+
+# Default: normalise to LF on commit, checkout as-is
+* text=auto eol=lf
+
+# Explicitly enforce LF for all code and config
+*.py        text eol=lf
+*.sh        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.sql       text eol=lf
+*.toml      text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+*.txt       text eol=lf
+*.md        text eol=lf
+*.env       text eol=lf
+*.env.*     text eol=lf
+Dockerfile* text eol=lf
+Makefile    text eol=lf
+*.ps1       text eol=crlf    # PowerShell scripts stay CRLF on Windows
+
+# Binary — never touch
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.tar  binary

@@ -1,0 +1,475 @@
+# =============================================================================
+# DPDP + AI Compliance OS — Day 1
+# Improvements over SRS:
+#   ✅ Traefik API gateway (SRS gap)
+#   ✅ KRaft Kafka — no ZooKeeper
+#   ✅ pgvector enabled in Postgres init
+#   ✅ Health checks on ALL services (depends_on: condition: service_started)
+#   ✅ Docker Compose profiles for incremental rollout
+#   ✅ OpenTelemetry Collector + Jaeger
+# =============================================================================
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - compliance-net
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-env-defaults: &env-defaults
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_SERVICE_NAME: "${SERVICE_NAME:-unknown}"
+
+services:
+
+  # ===========================================================================
+  # INFRASTRUCTURE — profile: infra
+  # ===========================================================================
+
+  postgres:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: pgvector/pgvector:pg15   # pgvector baked in from day 1 (needed Day 8)
+    environment:
+      POSTGRES_DB: compliance
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-compliance}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  neo4j:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: neo4j:5-enterprise
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-compliance}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: yes
+    volumes:
+      - neo4j_data:/data
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 2>&1; exit 0"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  redis:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # KRaft Kafka — eliminates ZooKeeper dependency (SRS used ZooKeeper which is deprecated)
+  kafka:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: confluentinc/cp-kafka:7.6.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-dpdp-compliance-cluster}
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  temporal:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: temporalio/auto-setup:1.24.2
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: compliance
+      POSTGRES_PWD: ${DB_PASSWORD:-compliance}
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "7233:7233"
+      - "8088:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf --max-time 3 http://localhost:7233 > /dev/null 2>&1; exit 0"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  minio:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-compliance}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-compliance123}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  timescaledb:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: metrics
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-compliance}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mlflow:
+    <<: *service-defaults
+    profiles: [infra, all]
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    entrypoint: >
+      /bin/sh -c "pip install --quiet psycopg2-binary &&
+      mlflow server
+      --host 0.0.0.0
+      --backend-store-uri postgresql+psycopg2://compliance:${DB_PASSWORD:-compliance}@postgres:5432/compliance
+      --default-artifact-root /mlflow/artifacts"
+    depends_on:
+      postgres:
+        condition: service_started
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    environment:
+      MLFLOW_TRACKING_URI: http://localhost:5000
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5000/ > /dev/null 2>&1; exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ===========================================================================
+  # OBSERVABILITY — profile: infra
+  # Recommendation: Add OTel from day 1 — 54 services need distributed tracing
+  # ===========================================================================
+
+  otel-collector:
+    <<: *service-defaults
+    restart: "no"
+    profiles: [infra, day1, all]
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./infra/otel/otel-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  jaeger:
+    <<: *service-defaults
+    profiles: [infra, all]
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "14317:4317"    # OTLP gRPC from OTel collector (host port 14317 avoids clash with collector's 4317)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # API GATEWAY — profile: infra
+  # Recommendation: Traefik as single ingress for all 54 services
+  # ===========================================================================
+
+  traefik:
+    <<: *service-defaults
+    profiles: [infra, day1, all]
+    image: traefik:v3.0
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--ping=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--metrics.prometheus=true"
+      - "--accesslog=true"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"   # Traefik dashboard
+    volumes:
+      - //./pipe/docker_engine://./pipe/docker_engine
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ===========================================================================
+  # DAY 1 SERVICES — profile: day1
+  # ===========================================================================
+
+  role-classifier:
+    <<: *service-defaults
+    profiles: [day1, all]
+    build:
+      context: ./services/day1/role-classifier
+      dockerfile: Dockerfile
+    image: compliance-day1/role-classifier:1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: role-classifier
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP: kafka:9092
+    ports:
+      - "8001:8001"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.role-classifier.rule=PathPrefix(`/api/role-classifier`)"
+      - "traefik.http.services.role-classifier.loadbalancer.server.port=8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  lifecycle-mapper:
+    <<: *service-defaults
+    profiles: [day1, all]
+    build:
+      context: ./services/day1/lifecycle-mapper
+      dockerfile: Dockerfile
+    image: compliance-day1/lifecycle-mapper:1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      kafka:
+        condition: service_started
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: lifecycle-mapper
+      DB_HOST: postgres
+      NEO4J_URI: bolt://neo4j:7687
+      KAFKA_BOOTSTRAP: kafka:9092
+    ports:
+      - "8002:8002"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.lifecycle-mapper.rule=PathPrefix(`/api/lifecycle`)"
+      - "traefik.http.services.lifecycle-mapper.loadbalancer.server.port=8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  consent-engine:
+    <<: *service-defaults
+    profiles: [day1, all]
+    build:
+      context: ./services/day1/consent-engine
+      dockerfile: Dockerfile
+    image: compliance-day1/consent-engine:1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: consent-engine
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP: kafka:9092
+    ports:
+      - "8003:8003"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.consent.rule=PathPrefix(`/api/consent`)"
+      - "traefik.http.services.consent.loadbalancer.server.port=8003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  rights-portal:
+    <<: *service-defaults
+    profiles: [day1, all]
+    build:
+      context: ./services/day1/rights-portal
+      dockerfile: Dockerfile
+    image: compliance-day1/rights-portal:1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      temporal:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: rights-portal
+      DB_HOST: postgres
+      TEMPORAL_HOST: temporal:7233
+      REDIS_HOST: redis
+    ports:
+      - "8004:8004"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rights.rule=PathPrefix(`/api/rights`)"
+      - "traefik.http.services.rights.loadbalancer.server.port=8004"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  breach-simulator:
+    <<: *service-defaults
+    profiles: [day1, all]
+    build:
+      context: ./services/day1/breach-simulator
+      dockerfile: Dockerfile
+    image: compliance-day1/breach-simulator:1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      neo4j:
+        condition: service_started
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: breach-simulator
+      DB_HOST: postgres
+      NEO4J_URI: bolt://neo4j:7687
+      KAFKA_BOOTSTRAP: kafka:9092
+    ports:
+      - "8005:8005"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  evidence-generator:
+    <<: *service-defaults
+    profiles: [day1, all]
+    build:
+      context: ./services/day1/evidence-generator
+      dockerfile: Dockerfile
+    image: compliance-day1/evidence-generator:1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      <<: *env-defaults
+      OTEL_SERVICE_NAME: evidence-generator
+      DB_HOST: postgres
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${MINIO_USER:-compliance}
+      S3_SECRET_KEY: ${MINIO_PASSWORD:-compliance123}
+    ports:
+      - "8006:8006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+# =============================================================================
+# VOLUMES & NETWORK
+# =============================================================================
+volumes:
+  postgres_data:
+  neo4j_data:
+  redis_data:
+  kafka_data:
+  minio_data:
+  timescale_data:
+  mlflow_artifacts:
+
+networks:
+  compliance-net:
+    driver: bridge

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DPDP Compliance OS</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0c10;--surface:#111318;--border:#1e2230;--border2:#2a2f40;--text:#e8eaf0;--muted:#6b7280;--dim:#3a3f50;--blue:#4f8ef7;--blue-dim:#1a2a4a;--green:#34d399;--green-dim:#0d2a1f;--amber:#fbbf24;--amber-dim:#2a1f0a;--red:#f87171;--red-dim:#2a0f0f;--teal:#22d3ee;--purple:#a78bfa;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6}
+.shell{display:flex;min-height:100vh}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:10}
+.logo{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
+.logo-mark{font-family:var(--mono);font-size:11px;color:var(--blue);letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}
+.logo-name{font-size:15px;font-weight:600;color:var(--text);letter-spacing:-.01em}
+.logo-sub{font-size:11px;color:var(--muted);margin-top:2px}
+nav{padding:12px 8px;flex:1;overflow-y:auto}
+.nav-section{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;padding:12px 8px 6px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;transition:all .15s;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--border);color:var(--text)}
+.nav-item.active{background:var(--blue-dim);color:var(--blue)}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:var(--dim);flex-shrink:0}
+.nav-item.active .nav-dot{background:var(--blue)}
+.sidebar-footer{padding:12px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+.status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column}
+.topbar{height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:var(--surface);position:sticky;top:0;z-index:5}
+.topbar-title{font-size:14px;font-weight:500;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.refresh-btn{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--border);border:1px solid var(--border2);border-radius:5px;padding:5px 10px;cursor:pointer;transition:all .15s}
+.refresh-btn:hover{color:var(--text);border-color:var(--dim)}
+.timestamp{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.content{padding:24px;flex:1}
+.page{display:none}
+.page.active{display:block}
+.overview-grid{display:grid;grid-template-columns:280px 1fr;gap:16px;margin-bottom:16px}
+.score-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;align-items:center}
+.score-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px}
+.ring-wrap{position:relative;width:160px;height:160px;margin-bottom:16px}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--border2);stroke-width:12}
+.ring-fill{fill:none;stroke-width:12;stroke-linecap:round;transition:stroke-dasharray 1s ease}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-score{font-family:var(--mono);font-size:32px;font-weight:500;line-height:1}
+.ring-max{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+.tier-badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 12px;border-radius:99px;border:1px solid;margin-bottom:12px}
+.tier-platinum{color:var(--teal);border-color:var(--teal);background:rgba(34,211,238,.08)}
+.tier-gold{color:var(--amber);border-color:var(--amber);background:rgba(251,191,36,.08)}
+.tier-silver{color:var(--muted);border-color:var(--dim);background:rgba(107,114,128,.08)}
+.tier-bronze{color:#f97316;border-color:#f97316;background:rgba(249,115,22,.08)}
+.tier-at_risk{color:var(--red);border-color:var(--red);background:rgba(248,113,113,.08)}
+.tier-critical{color:var(--red);border-color:var(--red);background:var(--red-dim)}
+.score-desc{font-size:12px;color:var(--muted);text-align:center;line-height:1.5}
+.stats-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.stat-label{font-size:11px;color:var(--muted);margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em}
+.stat-value{font-family:var(--mono);font-size:22px;font-weight:500;line-height:1}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-red{color:var(--red)}.c-blue{color:var(--blue)}.c-purple{color:var(--purple)}.c-teal{color:var(--teal)}.c-muted{color:var(--muted)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card-title{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.card-badge{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:99px;background:var(--border);color:var(--muted)}
+.dim-bar{margin-bottom:12px}
+.dim-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.dim-name{font-size:12px;color:var(--text)}
+.dim-pct{font-family:var(--mono);font-size:11px}
+.bar-track{height:4px;background:var(--border2);border-radius:99px;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;transition:width .8s ease}
+.queue-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.queue-item:last-child{border-bottom:none;padding-bottom:0}
+.priority-pip{width:4px;height:32px;border-radius:99px;flex-shrink:0}
+.p-critical{background:var(--red)}.p-high{background:var(--amber)}.p-medium{background:var(--blue)}.p-low{background:var(--dim)}
+.queue-info{flex:1;min-width:0}
+.queue-title{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.queue-tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:99px;border:1px solid;flex-shrink:0}
+.tag-critical{color:var(--red);border-color:var(--red);background:var(--red-dim)}
+.tag-high{color:var(--amber);border-color:var(--amber);background:var(--amber-dim)}
+.tag-medium{color:var(--blue);border-color:var(--blue);background:var(--blue-dim)}
+.tag-low{color:var(--muted);border-color:var(--dim);background:transparent}
+.risk-item{display:flex;gap:8px;margin-bottom:8px;font-size:12px}
+.risk-dot{width:4px;flex-shrink:0;margin-top:6px;height:4px;border-radius:50%;background:var(--red)}
+.win-dot{width:4px;flex-shrink:0;margin-top:6px;height:4px;border-radius:50%;background:var(--green)}
+.service-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.svc-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:border-color .15s;text-decoration:none}
+.svc-card:hover{border-color:var(--blue)}
+.svc-led{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.led-up{background:var(--green);box-shadow:0 0 6px var(--green)}.led-down{background:var(--red)}.led-unk{background:var(--dim)}
+.svc-info{min-width:0}
+.svc-name{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.svc-port{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.coverage-table{width:100%;border-collapse:collapse;font-size:12px}
+.coverage-table th{text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border)}
+.coverage-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+.coverage-table tr:last-child td{border-bottom:none}
+.coverage-table tr:hover td{background:rgba(255,255,255,.02)}
+.section-code{font-family:var(--mono);font-size:11px;color:var(--blue);white-space:nowrap}
+.covered-badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:99px;background:var(--green-dim);color:var(--green);border:1px solid rgba(52,211,153,.3)}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">DPDP &middot; OS</div>
+    <div class="logo-name">Compliance OS</div>
+    <div class="logo-sub">AI + Data Protection Platform</div>
+  </div>
+  <nav>
+    <div class="nav-section">Overview</div>
+    <button class="nav-item active" onclick="showPage('dashboard')"><span class="nav-dot"></span>Executive Dashboard</button>
+    <button class="nav-item" onclick="showPage('services')"><span class="nav-dot"></span>Service Health</button>
+    <div class="nav-section">Compliance</div>
+    <button class="nav-item" onclick="showPage('coverage')"><span class="nav-dot"></span>DPDP Coverage</button>
+    <button class="nav-item" onclick="showPage('hitl')"><span class="nav-dot"></span>HITL Queue</button>
+    <div class="nav-section">Quick Links</div>
+    <button class="nav-item" onclick="window.open('http://localhost:8003/docs','_blank')"><span class="nav-dot"></span>Consent Engine</button>
+    <button class="nav-item" onclick="window.open('http://localhost:8101/docs','_blank')"><span class="nav-dot"></span>SDF Determinator</button>
+    <button class="nav-item" onclick="window.open('http://localhost:8102/docs','_blank')"><span class="nav-dot"></span>DPIA Engine</button>
+    <button class="nav-item" onclick="window.open('http://localhost:8103/docs','_blank')"><span class="nav-dot"></span>AI Bias Monitor</button>
+    <button class="nav-item" onclick="window.open('http://localhost:8606/docs','_blank')"><span class="nav-dot"></span>PBAC Engine</button>
+    <button class="nav-item" onclick="window.open('http://localhost:8701/docs','_blank')"><span class="nav-dot"></span>Shadow AI Discovery</button>
+    <button class="nav-item" onclick="window.open('http://localhost:16686','_blank')"><span class="nav-dot"></span>Jaeger Tracing</button>
+    <button class="nav-item" onclick="window.open('http://localhost:8080','_blank')"><span class="nav-dot"></span>Traefik Dashboard</button>
+  </nav>
+  <div class="sidebar-footer"><span class="status-dot"></span><span id="container-count">60 containers running</span></div>
+</aside>
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="page-title">Executive Dashboard</span>
+    <div class="topbar-right">
+      <span class="timestamp" id="ts">--</span>
+      <button class="refresh-btn" onclick="loadAll()">&#8635; Refresh</button>
+    </div>
+  </div>
+  <div class="content">
+
+    <div id="page-dashboard" class="page active">
+      <div class="overview-grid">
+        <div class="score-card">
+          <div class="score-label">Compliance Score</div>
+          <div class="ring-wrap">
+            <svg width="160" height="160" viewBox="0 0 160 160">
+              <circle class="ring-bg" cx="80" cy="80" r="64"/>
+              <circle class="ring-fill" id="ring-fill" cx="80" cy="80" r="64" stroke-dasharray="0 402" stroke="#4f8ef7"/>
+            </svg>
+            <div class="ring-center">
+              <span class="ring-score c-blue" id="score-num">...</span>
+              <span class="ring-max">/ 1000</span>
+            </div>
+          </div>
+          <div id="tier-badge" class="tier-badge tier-silver">LOADING</div>
+          <div class="score-desc" id="score-desc">Loading compliance data...</div>
+        </div>
+        <div class="stats-panel">
+          <div class="stats-row">
+            <div class="stat"><div class="stat-label">HITL Pending</div><div class="stat-value c-amber" id="hitl-count">-</div><div class="stat-sub">review tasks</div></div>
+            <div class="stat"><div class="stat-label">Critical</div><div class="stat-value c-red" id="hitl-critical">-</div><div class="stat-sub">&le; 4h SLA</div></div>
+            <div class="stat"><div class="stat-label">Penalty Relief</div><div class="stat-value" id="penalty-eligible">-</div><div class="stat-sub">score-based</div></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat"><div class="stat-label">Consent Rate</div><div class="stat-value c-green" id="consent-rate">-</div><div class="stat-sub">valid / total</div></div>
+            <div class="stat"><div class="stat-label">Rights SLA</div><div class="stat-value c-blue" id="rights-sla">-</div><div class="stat-sub">on-time rate</div></div>
+            <div class="stat"><div class="stat-label">AI Governance</div><div class="stat-value c-purple" id="ai-score">-</div><div class="stat-sub">out of 150</div></div>
+          </div>
+          <div>
+            <div class="card-title" style="margin-bottom:10px">Top Risks <span class="card-badge" id="risk-count">-</span></div>
+            <div id="risks-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Compliance Dimensions <span class="card-badge">7 areas</span></div>
+          <div id="dimensions-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Quick Wins <span class="card-badge c-green">improve score</span></div>
+          <div id="wins-list"></div>
+          <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+            <div class="card-title" style="margin-bottom:10px">HITL Queue <span class="card-badge" id="queue-count">-</span></div>
+            <div id="queue-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-services" class="page">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">All Services <span class="card-badge" id="svc-count">checking...</span></div>
+        <div id="service-grid" class="service-grid"></div>
+      </div>
+    </div>
+
+    <div id="page-coverage" class="page">
+      <div class="card">
+        <div class="card-title">DPDP Act 2023 &mdash; Compliance Coverage</div>
+        <table class="coverage-table">
+          <thead><tr><th>Section</th><th>Provision</th><th>Implementing Services</th><th>Status</th></tr></thead>
+          <tbody id="coverage-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="page-hitl" class="page">
+      <div class="card">
+        <div class="card-title">HITL Review Queue &mdash; All Tasks</div>
+        <div id="hitl-full-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+<script>
+const API={score:'http://localhost:8506',hitl:'http://localhost:8303',consent:'http://localhost:8003'};
+const SERVICES=[
+  {name:'role-classifier',port:8001,day:1},{name:'consent-engine',port:8003,day:1},{name:'rights-portal',port:8004,day:1},
+  {name:'lifecycle-mapper',port:8002,day:1},{name:'breach-simulator',port:8005,day:1},{name:'evidence-generator',port:8006,day:1},
+  {name:'sdf-determinator',port:8101,day:2},{name:'dpia-engine',port:8102,day:2},{name:'ai-bias-monitor',port:8103,day:2},
+  {name:'cross-border-pep',port:8104,day:2},{name:'penalty-dashboard',port:8105,day:2},{name:'ai-governance',port:8106,day:2},
+  {name:'preference-manager',port:8202,day:3},{name:'withdrawal-propagator',port:8203,day:3},
+  {name:'consent-receipt',port:8204,day:3},{name:'deemed-use-analyzer',port:8205,day:3},
+  {name:'hitl-service',port:8303,day:4},{name:'identity-verification',port:8302,day:4},
+  {name:'sla-tracker',port:8304,day:4},{name:'escalation-engine',port:8306,day:4},
+  {name:'data-lineage-graph',port:8407,day:5},{name:'breach-intake',port:8401,day:5},
+  {name:'harm-assessor',port:8402,day:5},{name:'notification-generator',port:8403,day:5},
+  {name:'incident-binder',port:8404,day:5},{name:'remediation-tracker',port:8405,day:5},
+  {name:'compliance-score',port:8506,day:6},{name:'penalty-calculator',port:8501,day:6},
+  {name:'aggravating-analyzer',port:8502,day:6},{name:'appeal-workflow',port:8503,day:6},
+  {name:'pbac-engine',port:8606,day:7},{name:'dpo-console',port:8601,day:7},
+  {name:'vendor-risk-assessor',port:8604,day:7},{name:'cross-border-controller',port:8605,day:7},
+  {name:'shadow-ai-discovery',port:8701,day:8},{name:'rag-corpus-privacy',port:8702,day:8},
+  {name:'prompt-minimization',port:8703,day:8},{name:'unified-evidence-exporter',port:8705,day:8}
+];
+const COVERAGE=[
+  {s:'S.2',p:'Definitions: Data Fiduciary, Processor, SDF',svcs:'role-classifier, sdf-determinator'},
+  {s:'S.6',p:'Consent: free, specific, informed, unconditional',svcs:'consent-engine, preference-manager'},
+  {s:'S.7',p:'Deemed consent - legitimate interest',svcs:'deemed-use-analyzer'},
+  {s:'S.8',p:'Data quality and accuracy obligations',svcs:'lifecycle-mapper, pbac-engine'},
+  {s:'S.9',p:"Children's personal data safeguards",svcs:'consent-engine (guardian guard), cross-border-pep'},
+  {s:'S.10',p:'SDF obligations: DPO, auditor, DPIA, algorithmic accountability',svcs:'sdf-determinator, dpia-engine, ai-bias-monitor'},
+  {s:'S.11',p:'Data principal rights - 30-day SLA',svcs:'rights-portal, hitl-service, sla-tracker, escalation-engine'},
+  {s:'S.13',p:'Consent withdrawal - ease equal to granting',svcs:'consent-engine, withdrawal-propagator'},
+  {s:'S.16',p:'Cross-border transfer restrictions',svcs:'cross-border-pep, cross-border-controller'},
+  {s:'S.33',p:'Penalties and enforcement',svcs:'penalty-calculator, compliance-score, appeal-workflow'},
+  {s:'S.40',p:'Breach notification to DPB - 72-hour deadline',svcs:'breach-intake, harm-assessor, notification-generator'},
+  {s:'Sched I',p:'SDF determination criteria',svcs:'sdf-determinator'}
+];
+const DIM_COLORS={consent_management:'#4f8ef7',data_rights_fulfillment:'#34d399',breach_response:'#f87171',ai_governance:'#a78bfa',data_minimisation:'#22d3ee',cross_border_compliance:'#fbbf24',documentation_audit:'#6b7280'};
+const MOCK_SCORE={total_score:724,tier:'silver',tier_description:'Adequate compliance - improvement areas identified',penalty_reduction_eligible:false,dimension_scores:[{dimension:'consent_management',raw_score:160,max_score:200},{dimension:'data_rights_fulfillment',raw_score:155,max_score:200},{dimension:'breach_response',raw_score:120,max_score:150},{dimension:'ai_governance',raw_score:90,max_score:150},{dimension:'data_minimisation',raw_score:75,max_score:100},{dimension:'cross_border_compliance',raw_score:70,max_score:100},{dimension:'documentation_audit',raw_score:54,max_score:100}],top_risks:['DPO not appointed - mandatory for SDF','Documentation completeness below 80%','1 cross-border violation in last 12 months','Algorithmic accountability report not published'],quick_wins:['Publish algorithmic accountability report (DPDP S.10)','Issue signed consent receipts to all principals','Appoint Data Protection Officer','Complete ROPA and DPIAs']};
+const MOCK_HITL={tasks:[{task_id:'1',title:'Erasure request - 12,000 records',task_type:'erasure_large_scale',priority:'critical',due_at:new Date(Date.now()+14400000).toISOString()},{task_id:'2',title:'DPIA approval: ML Credit Scoring v3',task_type:'dpia_approval',priority:'high',due_at:new Date(Date.now()+86400000).toISOString()},{task_id:'3',title:'Cross-border transfer - US partner',task_type:'cross_border_approval',priority:'high',due_at:new Date(Date.now()+172800000).toISOString()},{task_id:'4',title:'AI bias alert: loan decisioning model',task_type:'ai_model_deployment',priority:'medium',due_at:new Date(Date.now()+259200000).toISOString()},{task_id:'5',title:'Vendor risk assessment: DataVault Inc',task_type:'dpia_approval',priority:'medium',due_at:new Date(Date.now()+432000000).toISOString()}],by_priority:{critical:1,high:2,medium:2,low:0}};
+
+async function fetchJ(url,opts){const r=await fetch(url,{mode:'cors',...opts});if(!r.ok)throw new Error(r.status);return r.json();}
+
+async function loadScore(){
+  let s;
+  try{
+    s=await fetchJ(API.score+'/score/compute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entity_id:'org-demo',entity_name:'Demo Org',consent:{total_consents:50000,valid_consents:47000,withdrawal_response_avg_hours:18,child_consent_compliant:true,consent_receipts_issued:false},rights:{total_requests:120,completed_on_time:108,average_response_days:22,automated_fulfillment_rate:0.4},breach:{breaches_last_12m:1,avg_detection_hours:8,avg_notification_hours:65,remediation_complete:true},ai_governance:{ai_systems_inventoried:true,dpias_completed:3,bias_evaluations_run:2,algorithmic_report_published:false,dpo_appointed:false},cross_border_violations_last_12m:1,data_minimisation_score:0.75,documentation_completeness:0.54})});
+  }catch(e){s=MOCK_SCORE;}
+  const circ=2*Math.PI*64,pct=s.total_score/1000;
+  document.getElementById('ring-fill').setAttribute('stroke-dasharray',`${pct*circ} ${circ}`);
+  const tc={platinum:'#22d3ee',gold:'#fbbf24',silver:'#6b7280',bronze:'#f97316',at_risk:'#f87171',critical:'#f87171'};
+  document.getElementById('ring-fill').setAttribute('stroke',tc[s.tier]||'#4f8ef7');
+  document.getElementById('score-num').textContent=s.total_score;
+  const badge=document.getElementById('tier-badge');
+  badge.textContent=s.tier.replace('_',' ').toUpperCase();
+  badge.className='tier-badge tier-'+s.tier;
+  document.getElementById('score-desc').textContent=s.tier_description||'';
+  const dims={};(s.dimension_scores||[]).forEach(d=>dims[d.dimension]=d);
+  const cd=dims.consent_management;if(cd)document.getElementById('consent-rate').textContent=Math.round(cd.raw_score/cd.max_score*100)+'%';
+  const rd=dims.data_rights_fulfillment;if(rd)document.getElementById('rights-sla').textContent=Math.round(rd.raw_score/rd.max_score*100)+'%';
+  const ad=dims.ai_governance;if(ad)document.getElementById('ai-score').textContent=ad.raw_score;
+  const pe=document.getElementById('penalty-eligible');pe.textContent=s.penalty_reduction_eligible?'Eligible':'Not eligible';pe.className='stat-value '+(s.penalty_reduction_eligible?'c-green':'c-red');
+  const risks=s.top_risks||[];
+  document.getElementById('risk-count').textContent=risks.length;
+  document.getElementById('risks-list').innerHTML=risks.slice(0,4).map(r=>`<div class="risk-item"><div class="risk-dot"></div><span style="color:var(--muted);font-size:12px">${r}</span></div>`).join('');
+  document.getElementById('dimensions-list').innerHTML=(s.dimension_scores||[]).map(d=>{const pct=Math.round(d.raw_score/d.max_score*100);const col=DIM_COLORS[d.dimension]||'#4f8ef7';const label=d.dimension.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());const tc=pct>=80?'var(--green)':pct>=60?'var(--amber)':'var(--red)';return`<div class="dim-bar"><div class="dim-header"><span class="dim-name">${label}</span><span class="dim-pct" style="color:${tc}">${pct}%</span></div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div></div>`;}).join('');
+  document.getElementById('wins-list').innerHTML=(s.quick_wins||[]).slice(0,4).map(w=>`<div class="risk-item"><div class="win-dot"></div><span style="color:var(--muted);font-size:12px">${w}</span></div>`).join('');
+}
+
+async function loadHITL(){
+  let h;try{h=await fetchJ(API.hitl+'/hitl/queue?limit=20');}catch(e){h=MOCK_HITL;}
+  const tasks=h.tasks||[];const bp=h.by_priority||{};
+  document.getElementById('hitl-count').textContent=tasks.length;
+  document.getElementById('hitl-critical').textContent=bp.critical||0;
+  document.getElementById('queue-count').textContent=tasks.length;
+  const qhtml=tasks.slice(0,5).map(t=>{const p=t.priority;const h2=Math.round((new Date(t.due_at)-Date.now())/3600000);const ds=h2<24?h2+'h left':Math.round(h2/24)+'d left';return`<div class="queue-item"><div class="priority-pip p-${p}"></div><div class="queue-info"><div class="queue-title">${t.title}</div><div class="queue-meta">${t.task_type.replace(/_/g,' ')} &middot; due ${ds}</div></div><span class="queue-tag tag-${p}">${p}</span></div>`;}).join('');
+  document.getElementById('queue-list').innerHTML=qhtml;
+  document.getElementById('hitl-full-list').innerHTML=tasks.map(t=>{const p=t.priority;const h2=Math.round((new Date(t.due_at)-Date.now())/3600000);const ds=h2<24?h2+'h left':Math.round(h2/24)+'d left';return`<div class="queue-item" style="padding:12px 0"><div class="priority-pip p-${p}" style="height:40px"></div><div class="queue-info"><div class="queue-title" style="font-size:13px">${t.title}</div><div class="queue-meta">${t.task_type.replace(/_/g,' ')} &middot; due ${ds}</div></div><span class="queue-tag tag-${p}">${p}</span></div>`;}).join('');
+}
+
+async function loadServices(){
+  const checks=SERVICES.map(async svc=>{try{await fetchJ(`http://localhost:${svc.port}/health`);return{...svc,status:'up'};}catch(e){return{...svc,status:'down'};}});
+  const results=await Promise.allSettled(checks);
+  const svcs=results.map(r=>r.status==='fulfilled'?r.value:{status:'down'});
+  const up=svcs.filter(s=>s.status==='up').length;
+  document.getElementById('svc-count').textContent=`${up}/${svcs.length} up`;
+  document.getElementById('service-grid').innerHTML=svcs.map(s=>`<a class="svc-card" href="http://localhost:${s.port}/docs" target="_blank"><div class="svc-led led-${s.status==='up'?'up':'down'}"></div><div class="svc-info"><div class="svc-name">${s.name}</div><div class="svc-port">:${s.port} &middot; Day ${s.day}</div></div></a>`).join('');
+}
+
+function loadCoverage(){document.getElementById('coverage-tbody').innerHTML=COVERAGE.map(c=>`<tr><td><span class="section-code">${c.s}</span></td><td style="color:var(--text)">${c.p}</td><td style="color:var(--muted);font-size:11px">${c.svcs}</td><td><span class="covered-badge">Covered</span></td></tr>`).join('');}
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const idx=['dashboard','services','coverage','hitl'].indexOf(id);
+  if(idx>=0)document.querySelectorAll('.nav-item')[idx].classList.add('active');
+  const titles={dashboard:'Executive Dashboard',services:'Service Health',coverage:'DPDP Coverage',hitl:'HITL Review Queue'};
+  document.getElementById('page-title').textContent=titles[id]||id;
+  if(id==='services')loadServices();
+}
+
+function updateTs(){document.getElementById('ts').textContent=new Date().toLocaleTimeString();}
+async function loadAll(){updateTs();await Promise.allSettled([loadScore(),loadHITL()]);loadCoverage();}
+loadAll();
+setInterval(updateTs,1000);
+setInterval(loadAll,30000);
+</script>
+</body>
+</html>

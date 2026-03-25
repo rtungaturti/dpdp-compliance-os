@@ -1,0 +1,54 @@
+version: "3.8"
+
+# ============================================================
+# Windows-specific Docker Compose overrides
+#
+# Usage — append to any compose command:
+#   docker compose -f docker-compose.day1.yml `
+#                  -f docker-compose.windows.yml `
+#                  --profile day1 up -d
+#
+# Or use dpdp.ps1 which applies these automatically.
+#
+# What this fixes for Windows:
+#   1. Neo4j memory settings (avoids OOM on WSL2)
+#   2. Kafka advertised listener (localhost instead of hostname)
+#   3. Temporal DB wait loop (WSL2 DNS sometimes slow)
+#   4. Removed deploy.replicas (ignored by compose, but confuses
+#      some Windows Docker Desktop versions)
+# ============================================================
+
+services:
+
+  # Neo4j: reduce heap on Windows (WSL2 competes for RAM)
+  neo4j:
+    environment:
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "1G"
+      NEO4J_server_memory_pagecache__size: "512m"
+
+  # Kafka: add localhost to advertised listeners for host access
+  kafka:
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+    ports:
+      - "9092:9092"
+      - "29092:29092"    # Accessible from Windows host at localhost:29092
+
+  # Temporal: longer start period on WSL2 (DNS resolution is slower)
+  temporal:
+    healthcheck:
+      start_period: 90s
+
+  # TimescaleDB: explicit port mapping for Windows host access
+  timescaledb:
+    ports:
+      - "5433:5432"
+
+  # Traefik: explicit host binding for Windows
+  traefik:
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
